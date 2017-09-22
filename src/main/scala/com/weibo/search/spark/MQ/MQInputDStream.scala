@@ -81,7 +81,7 @@ class MQReceiver (
   }
   
   def receiveMQ(){
-
+     
     val addr = Address(new InetSocketAddress(server, port))
     val dest = Name.bound(addr)
     
@@ -96,10 +96,11 @@ class MQReceiver (
     try {
    
       while(true){
+        println("Get Data....")
         val getRes = Await.result(client.get("scalaTest")) 
         getRes match {
-          case Some(Buf.Utf8(mqData)) => store(mqData); println(mqData)
-          case None => println("No data"); Thread.sleep(200)
+          case Some(Buf.Utf8(mqData)) => store(mqData)
+          case None => Thread.sleep(200)
         }
         //println(toString(res))
       }
