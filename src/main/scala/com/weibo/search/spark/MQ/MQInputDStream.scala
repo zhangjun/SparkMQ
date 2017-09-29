@@ -4,29 +4,43 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.internal.Logging
+import scala.reflect.ClassTag
 
-import com.twitter.finagle.Name
-import com.twitter.finagle.memcached.Client
 import  java.net.{InetAddress, InetSocketAddress}
-import com.twitter.finagle.Address
-import com.twitter.finagle.Memcached
+
 import com.twitter.io.Buf
 import com.twitter.util.{Await, Awaitable}
 import com.twitter.conversions.time._
 
+import annotation.meta.field
+
+// SpyMemcached
+//import net.spy.memcached.{ConnectionFactoryBuilder, AddrUtil, MemcachedClient}
+//import net.spy.memcached.transcoders.{Transcoder, SerializingTranscoder}
+//import net.spy.memcached.compat.log.{Level, AbstractLogger}
+
+// Xmemcached
+import net.rubyeye.xmemcached.MemcachedClientBuilder
+import net.rubyeye.xmemcached.MemcachedClient
+import net.rubyeye.xmemcached.XMemcachedClientBuilder
+import net.rubyeye.xmemcached.exception.MemcachedException
+import net.rubyeye.xmemcached.utils.AddrUtil
+import com.google.code.yanf4j.core.impl.StandardSocketOption;
+
+import java.util.concurrent.TimeUnit
 
 //private[streaming]
 class MQInputDStream (
-  _ssc : StreamingContext,
+  @transient var ssc_ : StreamingContext,
   server: String,
   port: Int,
   queueName: String,
   storageLevel: StorageLevel
-) extends ReceiverInputDStream[String](_ssc) {
+) extends ReceiverInputDStream[String](ssc_) {
     def getReceiver(): Receiver[String] = {
       new MQReceiver(server, port, queueName,  storageLevel)
     }
+    
 }
 
 
@@ -35,85 +49,117 @@ class MQReceiver (
   port: Int, 
   queueName: String,
   storageLevel: StorageLevel
-) extends Receiver[String] (storageLevel) {
+) extends Receiver[String] (storageLevel)  {
   
    def awaitResult[T](awaitable: Awaitable[T]): T = Await.result(awaitable, 5.seconds)
   
-  def onStop(){
+  override def onStop(){
     
   }
   
-  def onStart(){
-    
-    new Thread(){
+  override def onStart(){
+  printf("onStarting.....")
+    new Thread("MQ Receiver"){
       override def run(){
-        receiveMQ()
+        //receiveMQ()
+        //process()
+        receiveHandler()
+        //processExample()
       }
     }.start()
  
-    
-    
-//    val addr = Address(new InetSocketAddress("10.73.12.142", 11993))
-//    val dest = Name.bound(addr)
-//    
-//    val service = Memcached.client
-//          .withEjectFailedHost(true)
-//          .withTransport.connectTimeout(500.milliseconds)
-//          .withRequestTimeout(3.seconds)
-//          .connectionsPerEndpoint(4)
-//          .newService(dest, "client_name")      
-//    val client = Client(service)
-//    
-//    try {
-//      
-//    //val service = Memcached.client.connectionsPerEndpoint(1).newService(dest, "client_name")
-//    //val client = Client(service)
-//      
-//      while(true){
-//        val res = awaitResult(client.get("scalaTest")).get  
-//        //println(toString(res))
-//      }
-//      
-//    }catch{
-//      case e: shade.TimeoutException =>
-//        restart("Error! while connection", e)
-//    }
   }
   
-  def receiveMQ(){
+ private def processExample(){
+    var cnt = 300
+    while(cnt > 0){
+      var str: String = "scala data for test"
+      store(str)
+      cnt = cnt - 1
+    }  
+  }
+  
+private  def receiveHandler(){
+     println("receiving Data....")
+    
+//    // SpyMemcached   
+//    lazy val client = {
+//   //val addrs = new InetSocketAddress("10.73.12.142", 11233)
+//   
+//     val addrs = AddrUtil.getAddresses(server+ ":" + port)
+//   
+//     val cf = new ConnectionFactoryBuilder()
+//                            .setProtocol(ConnectionFactoryBuilder.Protocol.TEXT)
+//                            .build()
+//                            
+//     new MemcachedClient(cf, addrs) 
+//   }
+  
+  lazy val client = {   
+    val builder = new XMemcachedClientBuilder(AddrUtil.getAddresses(server + ":" + port))
+    builder.setSocketOption(StandardSocketOption.SO_SNDBUF, 32*1024)
+    builder.setSocketOption(StandardSocketOption.TCP_NODELAY, false)
+    builder.getConfiguration().setSessionIdleTimeout(10000)
+    builder.setConnectionPoolSize(10)
+    builder.setConnectTimeout(3000L)
+ 
+    //var client = builder.build()
+    builder.build()
+  }
+   client.setEnableHeartBeat(false)
+   client.setOpTimeout(3000L)
      
-    val addr = Address(new InetSocketAddress(server, port))
-    val dest = Name.bound(addr)
-    
-    val service = Memcached.client
-          .withEjectFailedHost(true)
-          .withTransport.connectTimeout(500.milliseconds)
-          .withRequestTimeout(3.seconds)
-          .connectionsPerEndpoint(4)
-          .newService(dest, "client_name")      
-    val client = Client(service)
-    
-    try {
-   
-      while(true){
-        println("Get Data....")
-        val getRes = Await.result(client.get("scalaTest")) 
-        getRes match {
-          case Some(Buf.Utf8(mqData)) => store(mqData)
-          case None => Thread.sleep(200)
-        }
-        //println(toString(res))
+   try {
+     while(true){
+      val getRes = client.get[String]("scalaTest")
+//      val getRes = "test data"
+      if(getRes != null){
+        store(getRes)  
+      } else {
+        Thread.sleep(2000)
       }
       
+     }
+//   
+//      while(true){
+//        println("Get Data....")
+//        val future = client.asyncGet("scalaTest")
+//        try {
+//          val any = future.get(1, TimeUnit.SECONDS)
+//          Option {
+//            any match {
+//              case x: java.lang.Byte => x.byteValue()
+//              case x: java.lang.Short => x.shortValue()
+//              case x: java.lang.Integer => x.intValue()
+//              case x: java.lang.Long => x.longValue()
+//              case x: java.lang.Float => x.floatValue()
+//              case x: java.lang.Double => x.doubleValue()
+//              case x: java.lang.Character => x.charValue()
+//              case x: java.lang.Boolean => x.booleanValue()
+//              case x => x
+//            }
+//          }
+//        }
+//        catch {
+//          case e : net.spy.memcached.OperationTimeoutException => future.cancel(false)
+//          None
+//        }
+      
     }catch{
-      case e:  com.twitter.util.TimeoutException =>
+      case e:  Exception  =>
         restart("Get Exception", e)
     }
+    
+
   }
   
-  def toString(buf: Buf): String = {
+ private def toString(buf: Buf): String = {
     val Buf.Utf8(str) = buf
     str
   }
+ 
+ def foo[U: Manifest](t: Any): U = if(implicitly[Manifest[U]] == manifest[Nothing])
+   error("type not provided")
+   else t.asInstanceOf[U]
    
 }
