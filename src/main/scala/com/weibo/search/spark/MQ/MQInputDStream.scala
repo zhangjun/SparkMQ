@@ -7,6 +7,8 @@ import org.apache.spark.streaming.receiver.Receiver
 import scala.reflect.ClassTag
 
 import  java.net.{InetAddress, InetSocketAddress}
+import java.util.concurrent.Executors
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import com.twitter.io.Buf
 import com.twitter.util.{Await, Awaitable}
@@ -37,7 +39,7 @@ class MQInputDStream (
   queueName: String,
   storageLevel: StorageLevel
 ) extends ReceiverInputDStream[String](ssc_) {
-    def getReceiver(): Receiver[String] = {
+    override def getReceiver(): Receiver[String] = {
       new MQReceiver(server, port, queueName,  storageLevel)
     }
     
@@ -52,13 +54,51 @@ class MQReceiver (
 ) extends Receiver[String] (storageLevel)  {
   
    def awaitResult[T](awaitable: Awaitable[T]): T = Await.result(awaitable, 5.seconds)
+   private var client : MemcachedClient = null
+   lazy val receiverExecutor = Executors.newFixedThreadPool(16, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("MQ Receiver Thread - %d").build())
   
   override def onStop(){
-    
+    receiverExecutor.shutdown()
+    if(!receiverExecutor.awaitTermination(60, TimeUnit.SECONDS)){
+      receiverExecutor.shutdownNow()
+    }
   }
   
   override def onStart(){
-  printf("onStarting.....")
+    printf("onStarting.....")
+  
+  //    // SpyMemcached   
+//    lazy val client = {
+//   //val addrs = new InetSocketAddress("10.73.12.142", 11233)
+//   
+//     val addrs = AddrUtil.getAddresses(server+ ":" + port)
+//   
+//     val cf = new ConnectionFactoryBuilder()
+//                            .setProtocol(ConnectionFactoryBuilder.Protocol.TEXT)
+//                            .build()
+//                            
+//     new MemcachedClient(cf, addrs) 
+//   }
+  
+  
+    client = {   
+      val builder = new XMemcachedClientBuilder(AddrUtil.getAddresses(server + ":" + port))
+      builder.setSocketOption(StandardSocketOption.SO_SNDBUF, 32*1024)
+      builder.setSocketOption(StandardSocketOption.TCP_NODELAY, false)
+      builder.getConfiguration().setSessionIdleTimeout(10000)
+      builder.setConnectionPoolSize(10)
+      builder.setConnectTimeout(3000L)
+   
+      //var client = builder.build()
+      builder.build()
+    }
+   client.setEnableHeartBeat(false)
+   client.setOpTimeout(3000L)
+   
+   
+   for( i <- 1 until 10){
+     receiverExecutor.submit(new MQReceiverHandler(this))
+   }
     new Thread("MQ Receiver"){
       override def run(){
         //receiveMQ()
@@ -82,33 +122,9 @@ class MQReceiver (
 private  def receiveHandler(){
      println("receiving Data....")
     
-//    // SpyMemcached   
-//    lazy val client = {
-//   //val addrs = new InetSocketAddress("10.73.12.142", 11233)
-//   
-//     val addrs = AddrUtil.getAddresses(server+ ":" + port)
-//   
-//     val cf = new ConnectionFactoryBuilder()
-//                            .setProtocol(ConnectionFactoryBuilder.Protocol.TEXT)
-//                            .build()
-//                            
-//     new MemcachedClient(cf, addrs) 
-//   }
-  
-  lazy val client = {   
-    val builder = new XMemcachedClientBuilder(AddrUtil.getAddresses(server + ":" + port))
-    builder.setSocketOption(StandardSocketOption.SO_SNDBUF, 32*1024)
-    builder.setSocketOption(StandardSocketOption.TCP_NODELAY, false)
-    builder.getConfiguration().setSessionIdleTimeout(10000)
-    builder.setConnectionPoolSize(10)
-    builder.setConnectTimeout(3000L)
+
  
-    //var client = builder.build()
-    builder.build()
-  }
-   client.setEnableHeartBeat(false)
-   client.setOpTimeout(3000L)
-     
+   
    try {
      while(true){
       val getRes = client.get[String]("scalaTest")
@@ -152,6 +168,11 @@ private  def receiveHandler(){
     
 
   }
+
+
+private[MQ] def getClient: MemcachedClient = {
+  this.client
+}
   
  private def toString(buf: Buf): String = {
     val Buf.Utf8(str) = buf
