@@ -5,17 +5,18 @@ import java.util.Date
 private[MQ] class MQReceiverHandler(receiver: MQReceiver) extends Runnable  {
   def run(): Unit = {
     while(!receiver.isStopped()){
-      val client = receiver.getClient
+      val client = receiver.getCF
       
       try {
         var cnt = 0
         while(true){
-          val getRes = client.get[String](receiver.getQueueName)
+          //val getRes = client.get[String](receiver.getQueueName)
+          val getRes = client.get(receiver.getQueueName)
 //      val getRes = "test data"
           if(getRes != null){
             cnt += 1
             var currTime = new Date()
-            receiver.store(getRes + currTime.getTime + "-" + cnt)  
+            receiver.store(getRes.get + currTime.getTime + "-" + cnt)  
           } else {
             Thread.sleep(2000)
           }

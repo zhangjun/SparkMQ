@@ -98,21 +98,22 @@ class MQReceiver (
 //   }
   
   
-    client = {   
-      val builder = new XMemcachedClientBuilder(AddrUtil.getAddresses(server + ":" + port))
-      builder.setSocketOption(StandardSocketOption.SO_SNDBUF, 32*1024)
-      builder.setSocketOption(StandardSocketOption.TCP_NODELAY, false)
-      builder.getConfiguration().setSessionIdleTimeout(10000)
-      builder.setConnectionPoolSize(10)
-      builder.setConnectTimeout(3000L)
+//    client = {   
+//      val builder = new XMemcachedClientBuilder(AddrUtil.getAddresses(server + ":" + port))
+//      builder.setSocketOption(StandardSocketOption.SO_SNDBUF, 32*1024)
+//      builder.setSocketOption(StandardSocketOption.TCP_NODELAY, false)
+//      builder.getConfiguration().setSessionIdleTimeout(10000)
+//      builder.setConnectionPoolSize(10)
+//      builder.setConnectTimeout(3000L)
+//   
+//      //var client = builder.build()
+//      builder.build()
+//    }
+//   client.setEnableHeartBeat(false)
+//   client.setOpTimeout(3000L)
    
-      //var client = builder.build()
-      builder.build()
-    }
-   client.setEnableHeartBeat(false)
-   client.setOpTimeout(3000L)
+   client_folsom = MemcacheClientBuilder.newStringClient().withAddress(HostAndPort.fromParts("10.73.12.142", 11993)).withRetry(false).withConnections(10).connectAscii()
    
-   //client_folsom = MemcacheClientBuilder.newStringClient().
    for( i <- 1 until threadNum){
      receiverExecutor.submit(new MQReceiverHandler(this))
    }
@@ -137,60 +138,63 @@ class MQReceiver (
     }  
   }
   
-private  def receiveHandler(){
-   println("receiving Data....")
-   
-   try {
-     while(true){
-      val getRes = client.get[String]("scalaTest")
-//      val getRes = "test data"
-      if(getRes != null){
-        store(getRes)
-//        val localAddr = InetAddress.getLocalHost.getHostAddress
-//        store(getRes + localAddr)  
-      } else {
-        Thread.sleep(2000)
-      }
-      
-     }
+//private  def receiveHandler(){
+//   println("receiving Data....")
 //   
-//      while(true){
-//        println("Get Data....")
-//        val future = client.asyncGet("scalaTest")
-//        try {
-//          val any = future.get(1, TimeUnit.SECONDS)
-//          Option {
-//            any match {
-//              case x: java.lang.Byte => x.byteValue()
-//              case x: java.lang.Short => x.shortValue()
-//              case x: java.lang.Integer => x.intValue()
-//              case x: java.lang.Long => x.longValue()
-//              case x: java.lang.Float => x.floatValue()
-//              case x: java.lang.Double => x.doubleValue()
-//              case x: java.lang.Character => x.charValue()
-//              case x: java.lang.Boolean => x.booleanValue()
-//              case x => x
-//            }
-//          }
-//        }
-//        catch {
-//          case e : net.spy.memcached.OperationTimeoutException => future.cancel(false)
-//          None
-//        }
-      
-    }catch{
-      case e:  Exception  =>
-        restart("Get Exception", e)
-    }
-    
-
-  }
+//   try {
+//     while(true){
+//      val getRes = client.get[String]("scalaTest")
+////      val getRes = "test data"
+//      if(getRes != null){
+//        store(getRes)
+////        val localAddr = InetAddress.getLocalHost.getHostAddress
+////        store(getRes + localAddr)  
+//      } else {
+//        Thread.sleep(2000)
+//      }
+//      
+//     }
+////   
+////      while(true){
+////        println("Get Data....")
+////        val future = client.asyncGet("scalaTest")
+////        try {
+////          val any = future.get(1, TimeUnit.SECONDS)
+////          Option {
+////            any match {
+////              case x: java.lang.Byte => x.byteValue()
+////              case x: java.lang.Short => x.shortValue()
+////              case x: java.lang.Integer => x.intValue()
+////              case x: java.lang.Long => x.longValue()
+////              case x: java.lang.Float => x.floatValue()
+////              case x: java.lang.Double => x.doubleValue()
+////              case x: java.lang.Character => x.charValue()
+////              case x: java.lang.Boolean => x.booleanValue()
+////              case x => x
+////            }
+////          }
+////        }
+////        catch {
+////          case e : net.spy.memcached.OperationTimeoutException => future.cancel(false)
+////          None
+////        }
+//      
+//    }catch{
+//      case e:  Exception  =>
+//        restart("Get Exception", e)
+//    }
+//    
+//
+//  }
 
 
   private[MQ] def getClient: MemcachedClient = {
     this.client
   }
 
+  private[MQ] def getCF: AsciiMemcacheClient[String] = {
+    this.client_folsom
+  }
   private[MQ] def getQueueName: String = {
     this.queueName
   }
