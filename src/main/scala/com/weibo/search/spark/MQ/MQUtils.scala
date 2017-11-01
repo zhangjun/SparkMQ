@@ -13,9 +13,10 @@ object MQUtils {
       server: String,
       port: Int,
       queueName: String,
+      threadNum: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
       ): ReceiverInputDStream[String] = {
-    new MQInputDStream(ssc, server, port, queueName, storageLevel)
+    new MQInputDStream(ssc, server, port, queueName, threadNum, storageLevel)
   }
 
 
@@ -23,10 +24,11 @@ object MQUtils {
       jssc: JavaStreamingContext,
       server: String,
       port: Int,
-      queueName: String
+      queueName: String,
+      threadNum: Int
       ): JavaReceiverInputDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    createStream(jssc.ssc, server, port, queueName)
+    createStream(jssc.ssc, server, port, queueName, threadNum)
   }
   
    def createStream(
@@ -34,10 +36,11 @@ object MQUtils {
       server: String,
       port: Int, 
       queueName: String,
+      threadNum: Int,
       storageLevel: StorageLevel
       ): JavaReceiverInputDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    createStream(jssc.ssc, server, port, queueName, storageLevel)
+    createStream(jssc.ssc, server, port, queueName, threadNum, storageLevel)
   }
    
 }
@@ -48,8 +51,9 @@ private[MQ] class MQUtilsPythonHandler {
       server: String,
       port: Int, 
       queueName: String,
+      threadNum: Int,
       storageLevel: StorageLevel
       ): JavaDStream[String] = {
-    MQUtils.createStream(jssc, server, port, queueName, storageLevel)
+    MQUtils.createStream(jssc, server, port, queueName, threadNum, storageLevel)
   }
 }

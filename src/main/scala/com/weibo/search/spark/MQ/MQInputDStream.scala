@@ -4,7 +4,9 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.internal.Logging
 import scala.reflect.ClassTag
+
 
 import  java.net.{InetAddress, InetSocketAddress}
 import java.util.concurrent.Executors
@@ -13,6 +15,9 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import com.twitter.io.Buf
 import com.twitter.util.{Await, Awaitable}
 import com.twitter.conversions.time._
+
+import org.apache.log4j.Logger
+import org.apache.log4j.Level
 
 import annotation.meta.field
 
@@ -29,6 +34,12 @@ import net.rubyeye.xmemcached.exception.MemcachedException
 import net.rubyeye.xmemcached.utils.AddrUtil
 import com.google.code.yanf4j.core.impl.StandardSocketOption;
 
+// spotify folsom
+import com.spotify.folsom.{MemcacheClient, MemcacheClientBuilder}
+import com.spotify.folsom.AsciiMemcacheClient
+import com.spotify.folsom.MemcacheClient
+import com.google.common.net.HostAndPort
+
 import java.util.concurrent.TimeUnit
 
 //private[streaming]
@@ -37,10 +48,11 @@ class MQInputDStream (
   server: String,
   port: Int,
   queueName: String,
+  threadNum: Int = 16,
   storageLevel: StorageLevel
 ) extends ReceiverInputDStream[String](ssc_) {
     override def getReceiver(): Receiver[String] = {
-      new MQReceiver(server, port, queueName,  storageLevel)
+      new MQReceiver(server, port, queueName,  threadNum, storageLevel)
     }
     
 }
@@ -50,12 +62,17 @@ class MQReceiver (
   server: String,
   port: Int, 
   queueName: String,
+  threadNum: Int,
   storageLevel: StorageLevel
 ) extends Receiver[String] (storageLevel)  {
   
    def awaitResult[T](awaitable: Awaitable[T]): T = Await.result(awaitable, 5.seconds)
+   
+   // xmemcached 
    private var client : MemcachedClient = null
-   lazy val receiverExecutor = Executors.newFixedThreadPool(16, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("MQ Receiver Thread - %d").build())
+   // folsom
+   private var client_folsom: AsciiMemcacheClient[String] = null
+   lazy val receiverExecutor = Executors.newFixedThreadPool(threadNum, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("MQ Receiver Thread - %d").build())
   
   override def onStop(){
     receiverExecutor.shutdown()
@@ -95,18 +112,19 @@ class MQReceiver (
    client.setEnableHeartBeat(false)
    client.setOpTimeout(3000L)
    
-   
-   for( i <- 1 until 10){
+   //client_folsom = MemcacheClientBuilder.newStringClient().
+   for( i <- 1 until threadNum){
      receiverExecutor.submit(new MQReceiverHandler(this))
    }
-    new Thread("MQ Receiver"){
-      override def run(){
-        //receiveMQ()
-        //process()
-        receiveHandler()
-        //processExample()
-      }
-    }.start()
+   
+//    new Thread("MQ Receiver"){
+//      override def run(){
+//        //receiveMQ()
+//        //process()
+//        receiveHandler()
+//        //processExample()
+//      }
+//    }.start()
  
   }
   
@@ -120,17 +138,16 @@ class MQReceiver (
   }
   
 private  def receiveHandler(){
-     println("receiving Data....")
-    
-
- 
+   println("receiving Data....")
    
    try {
      while(true){
       val getRes = client.get[String]("scalaTest")
 //      val getRes = "test data"
       if(getRes != null){
-        store(getRes)  
+        store(getRes)
+//        val localAddr = InetAddress.getLocalHost.getHostAddress
+//        store(getRes + localAddr)  
       } else {
         Thread.sleep(2000)
       }
@@ -170,10 +187,13 @@ private  def receiveHandler(){
   }
 
 
-private[MQ] def getClient: MemcachedClient = {
-  this.client
-}
-  
+  private[MQ] def getClient: MemcachedClient = {
+    this.client
+  }
+
+  private[MQ] def getQueueName: String = {
+    this.queueName
+  }
  private def toString(buf: Buf): String = {
     val Buf.Utf8(str) = buf
     str
@@ -184,3 +204,18 @@ private[MQ] def getClient: MemcachedClient = {
    else t.asInstanceOf[U]
    
 }
+
+//object StreamingExamples extends Logging {
+//
+//  /** Set reasonable logging levels for streaming if the user has not configured log4j. */
+//  def setStreamingLogLevels() {
+//    val log4jInitialized = Logger.getRootLogger.getAllAppenders.hasMoreElements
+//    if (!log4jInitialized) {
+//      // We first log something to initialize Spark's default logging, then we override the
+//      // logging level.
+//      logInfo("Setting log level to [WARN] for streaming example." +
+//        " To override add a custom log4j.properties to the classpath.")
+//      Logger.getRootLogger.setLevel(Level.WARN)
+//    }
+//  }
+//}

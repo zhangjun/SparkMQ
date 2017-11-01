@@ -34,6 +34,10 @@ libraryDependencies += "org.apache.spark" % "spark-core_2.11" % "2.1.0" % "provi
 // https://mvnrepository.com/artifact/com.googlecode.xmemcached/xmemcached
 //libraryDependencies += "com.googlecode.xmemcached" % "xmemcached" % "2.3.2"
 
+// https://mvnrepository.com/artifact/com.spotify/folsom
+//libraryDependencies += "com.spotify" % "folsom" % "0.8.0"
+
+
 
 libraryDependencies ++= Seq(
 	// https://mvnrepository.com/artifact/com.twitter/finagle-core_2.11
