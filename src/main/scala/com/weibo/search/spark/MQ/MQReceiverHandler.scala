@@ -11,12 +11,12 @@ private[MQ] class MQReceiverHandler(receiver: MQReceiver) extends Runnable  {
         var cnt = 0
         while(true){
           //val getRes = client.get[String](receiver.getQueueName)
-          val getRes = client.get(receiver.getQueueName)
+          val getRes = client.get(receiver.getQueueName).get
 //      val getRes = "test data"
           if(getRes != null){
             cnt += 1
             var currTime = new Date()
-            receiver.store(getRes.get + currTime.getTime + "-" + cnt)  
+            receiver.store(getRes + currTime.getTime + "-" + cnt)  
           } else {
             Thread.sleep(2000)
           }

@@ -16,8 +16,8 @@ import com.twitter.io.Buf
 import com.twitter.util.{Await, Awaitable}
 import com.twitter.conversions.time._
 
-import org.apache.log4j.Logger
-import org.apache.log4j.Level
+//import org.apache.log4j.Logger
+//import org.apache.log4j.Level
 
 import annotation.meta.field
 
@@ -39,8 +39,10 @@ import com.spotify.folsom.{MemcacheClient, MemcacheClientBuilder}
 import com.spotify.folsom.AsciiMemcacheClient
 import com.spotify.folsom.MemcacheClient
 import com.google.common.net.HostAndPort
+import com.google.common.util.concurrent.ListenableFuture
 
 import java.util.concurrent.TimeUnit
+import com.spotify.folsom.ConnectFuture
 
 //private[streaming]
 class MQInputDStream (
@@ -79,6 +81,9 @@ class MQReceiver (
     if(!receiverExecutor.awaitTermination(60, TimeUnit.SECONDS)){
       receiverExecutor.shutdownNow()
     }
+    
+    client_folsom.shutdown()
+    ConnectFuture.disconnectFuture(client_folsom).get()
   }
   
   override def onStart(){
@@ -113,6 +118,14 @@ class MQReceiver (
 //   client.setOpTimeout(3000L)
    
    client_folsom = MemcacheClientBuilder.newStringClient().withAddress(HostAndPort.fromParts("10.73.12.142", 11993)).withRetry(false).withConnections(10).connectAscii()
+   try{
+     ConnectFuture.connectFuture(client_folsom).get()
+   } catch {
+     case e: Exception =>
+       client_folsom.shutdown()
+       ConnectFuture.disconnectFuture(client_folsom).get()
+       restart("Get Exception while connecting", e)
+   }
    
    for( i <- 1 until threadNum){
      receiverExecutor.submit(new MQReceiverHandler(this))
