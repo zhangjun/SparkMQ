@@ -117,7 +117,7 @@ class MQReceiver (
 //   client.setEnableHeartBeat(false)
 //   client.setOpTimeout(3000L)
    
-   client_folsom = MemcacheClientBuilder.newStringClient().withAddress(HostAndPort.fromParts("10.73.12.142", 11993)).withRetry(false).withConnections(10).connectAscii()
+   client_folsom = MemcacheClientBuilder.newStringClient().withAddress(HostAndPort.fromParts(server, port)).withRetry(false).withConnections(10).connectAscii()
    try{
      ConnectFuture.connectFuture(client_folsom).get()
    } catch {
